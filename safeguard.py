@@ -17,6 +17,11 @@ SECRET_PATTERNS = [
     (r"github_pat_[a-zA-Z0-9_]{82}", "GitHub Fine-Grained Personal Access Token"),
     (r"sk-[a-zA-Z0-9]{48}", "OpenAI API Key"),
     (r"sk-ant-[a-zA-Z0-9_\-]{80,}", "Anthropic API Key"),
+    (r"(?:sk|rk)_live_[0-9a-zA-Z]{24,}", "Stripe Live Secret Key"),
+    (r"[0-9]{8,10}:[a-zA-Z0-9_-]{35}", "Telegram Bot Token"),
+    (r"hf_[a-zA-Z0-9]{34,}", "Hugging Face Access Token"),
+    (r"https://hooks\.slack\.com/services/T[a-zA-Z0-9_]+/B[a-zA-Z0-9_]+/[a-zA-Z0-9_]+", "Slack Webhook URL"),
+    (r"eyJ[a-zA-Z0-9_-]{10,}\.eyJ[a-zA-Z0-9_-]{10,}\.[a-zA-Z0-9_-]{10,}", "JSON Web Token (JWT)"),
     (r"AKIA[0-9A-Z]{16}", "AWS Access Key ID"),
     (r"AIza[0-9A-Za-z-_]{35}", "Google API Key"),
     (r"-----BEGIN (?:RSA |EC )?PRIVATE KEY-----", "Private Cryptographic Key"),
@@ -62,6 +67,7 @@ def main():
     parser = argparse.ArgumentParser(description="Zero-Leak Security Interceptor for Claude Code CLI.")
     parser.add_argument("target", nargs="?", default=".", help="File or directory path to audit for secret leaks")
     parser.add_argument("--redact", action="store_true", help="Automatically redact secrets in-place with safe placeholders")
+    parser.add_argument("--check", action="store_true", help="CI/Audit mode: fail with exit 1 if secrets found, no file writes")
     parser.add_argument("--stdin", action="store_true", help="Read input text directly from standard input (pipe mode)")
 
     args = parser.parse_args()
