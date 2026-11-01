@@ -13,9 +13,10 @@ When using autonomous coding agents, developers frequently ask Claude to analyze
 
 ## 🚀 The Solution
 `claude-code-safeguard` provides an automated pre-execution defense layer:
-- **Catches High-Entropy Keys:** GitHub PATs, Anthropic `sk-ant-*`, OpenAI keys, AWS access keys, and private RSA keys.
+- **Catches High-Entropy Keys:** GitHub PATs, Anthropic `sk-ant-*`, OpenAI keys, AWS access keys, Telegram bot tokens, Stripe live secrets, HuggingFace tokens, Slack webhooks, and private RSA keys.
 - **Pipe / Pre-Hook Mode:** Intercepts terminal outputs before feeding into Claude.
 - **In-Place Redaction:** Safely replaces secrets with harmless `[REDACTED]` tokens.
+- **CI / Audit Mode:** Fail builds immediately if secrets are detected with `--check`.
 
 ---
 
@@ -27,6 +28,12 @@ python3 safeguard.py ./my-project
 
 # Auto-sanitize files in-place
 python3 safeguard.py ./my-project --redact
+
+# Run in CI mode (exit code 1 on leak, no file modification)
+python3 safeguard.py ./my-project --check
+
+# Pipe terminal output before passing to Claude
+cat production.env | python3 safeguard.py --stdin
 ```
 
 ---
