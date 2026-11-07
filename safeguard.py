@@ -14,26 +14,26 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-# High-entropy & known API key regex patterns
+# High-entropy & known API key regex patterns (specific patterns first, generic fallback last)
 SECRET_PATTERNS: List[Tuple[str, str]] = [
-    (r"(?i)(api[_-]?key|secret|token|password|passwd|auth)[\s:=]+['\"]?([a-zA-Z0-9_\-\.]{16,})['\"]?", "Generic Secret/API Key"),
-    (r"ghp_[a-zA-Z0-9]{36}", "GitHub Personal Access Token (Classic)"),
-    (r"github_pat_[a-zA-Z0-9_]{82}", "GitHub Fine-Grained Personal Access Token"),
-    (r"sk-[a-zA-Z0-9]{48}", "OpenAI API Key"),
-    (r"sk-ant-[a-zA-Z0-9_\-]{80,}", "Anthropic API Key"),
-    (r"sk-ant-api03-[a-zA-Z0-9_\-]{80,}", "Anthropic Workspace Key"),
-    (r"sk-[a-f0-9]{32}", "DeepSeek API Key"),
-    (r"sbp_[a-zA-Z0-9]{40}", "Supabase Service Token"),
-    (r"SG\.[a-zA-Z0-9_-]{22}\.[a-zA-Z0-9_-]{43}", "SendGrid API Key"),
-    (r"(?i)Bearer\s+([a-zA-Z0-9_\-\.]{25,})", "Bearer Authentication Token"),
+    (r"\bghp_[a-zA-Z0-9]{36}\b", "GitHub Personal Access Token (Classic)"),
+    (r"\bgithub_pat_[a-zA-Z0-9_]{82}\b", "GitHub Fine-Grained Personal Access Token"),
+    (r"\bsk-ant-[a-zA-Z0-9_\-]{80,}\b", "Anthropic API Key"),
+    (r"\bsk-ant-admin-[a-zA-Z0-9_\-]{32,}\b", "Anthropic Workspace Key"),
+    (r"\bsk-[a-zA-Z0-9]{48}\b", "OpenAI API Key"),
+    (r"\bsk-[a-f0-9]{32}\b", "DeepSeek API Key"),
+    (r"\bsbp_[a-zA-Z0-9]{40}\b", "Supabase Service Token"),
+    (r"\bSG\.[a-zA-Z0-9_-]{22}\.[a-zA-Z0-9_-]{43}\b", "SendGrid API Key"),
     (r"(?:sk|rk)_live_[0-9a-zA-Z]{24,}", "Stripe Live Secret Key"),
-    (r"[0-9]{8,10}:[a-zA-Z0-9_-]{35}", "Telegram Bot Token"),
-    (r"hf_[a-zA-Z0-9]{34,}", "Hugging Face Access Token"),
+    (r"\b[0-9]{8,10}:[a-zA-Z0-9_-]{35}\b", "Telegram Bot Token"),
+    (r"\bhf_[a-zA-Z0-9]{34,}\b", "Hugging Face Access Token"),
     (r"https://hooks\.slack\.com/services/T[a-zA-Z0-9_]+/B[a-zA-Z0-9_]+/[a-zA-Z0-9_]+", "Slack Webhook URL"),
-    (r"eyJ[a-zA-Z0-9_-]{10,}\.eyJ[a-zA-Z0-9_-]{10,}\.[a-zA-Z0-9_-]{10,}", "JSON Web Token (JWT)"),
-    (r"AKIA[0-9A-Z]{16}", "AWS Access Key ID"),
-    (r"AIza[0-9A-Za-z-_]{35}", "Google API Key"),
+    (r"\beyJ[a-zA-Z0-9_-]{10,}\.eyJ[a-zA-Z0-9_-]{10,}\.[a-zA-Z0-9_-]{10,}\b", "JSON Web Token (JWT)"),
+    (r"\bAKIA[0-9A-Z]{16}\b", "AWS Access Key ID"),
+    (r"\bAIza[0-9A-Za-z-_]{35}\b", "Google API Key"),
     (r"-----BEGIN (?:RSA |EC )?PRIVATE KEY-----", "Private Cryptographic Key"),
+    (r"(?i)Bearer\s+([a-zA-Z0-9_\-\.]{25,})", "Bearer Authentication Token"),
+    (r"(?i)(api[_-]?key|secret|token|password|passwd|auth)[\s:=]+['\"]?([a-zA-Z0-9_\-\.]{16,})['\"]?", "Generic Secret/API Key"),
 ]
 
 
@@ -42,14 +42,13 @@ def scan_text(text: str, redact: bool = True) -> Tuple[List[Tuple[str, str]], st
     sanitized_text = text
 
     for pattern, name in SECRET_PATTERNS:
-        matches = re.finditer(pattern, text)
+        matches = list(re.finditer(pattern, sanitized_text))
         for m in matches:
             secret_val = m.group(0)
             found_secrets.append((name, secret_val))
-            if redact:
-                sanitized_text = sanitized_text.replace(secret_val, f"[REDACTED_{name.upper().replace(' ', '_')}]")
+            sanitized_text = sanitized_text.replace(secret_val, f"[REDACTED_{name.upper().replace(' ', '_').replace('/', '_')}]")
 
-    return found_secrets, sanitized_text
+    return found_secrets, sanitized_text if redact else text
 
 
 def scan_file(file_path: str, redact: bool = False, quiet: bool = False) -> Tuple[bool, List[Dict[str, str]]]:
@@ -133,8 +132,11 @@ def main() -> None:
         for f in target_path.rglob("*"):
             if not f.is_file():
                 continue
-            # Skip hidden files or excluded dirs
-            if any(part.startswith(".") for part in f.parts) or any(part in excluded_dirs for part in f.parts):
+            # Skip hidden parent directories or explicitly excluded directories
+            if any(part.startswith(".") for part in f.parts[:-1]) or any(part in excluded_dirs for part in f.parts):
+                continue
+            # Skip hidden dotfiles, except .env* files which are common leak vectors
+            if f.name.startswith(".") and not f.name.startswith(".env"):
                 continue
             scanned_count += 1
             clean, findings = scan_file(str(f), redact=args.redact, quiet=quiet_mode)

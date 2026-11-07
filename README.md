@@ -47,3 +47,9 @@ cat production.env | python3 safeguard.py --stdin
 
 ## 📄 License
 MIT License - Copyright (c) 2026 Fajar Indra Pradipta Gajah.
+
+## 🧪 Testing
+
+```bash
+python3 -m unittest discover tests
+```
