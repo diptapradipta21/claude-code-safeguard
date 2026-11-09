@@ -27,6 +27,28 @@ class TestClaudeCodeSafeguard(unittest.TestCase):
         self.assertNotIn(fake_key, redacted)
         self.assertIn("[REDACTED_OPENAI_API_KEY]", redacted)
 
+    def test_scan_text_detects_npm_and_gitlab(self):
+        fake_npm = "npm_" + "1" * 36
+        fake_gl = "glpat-" + "a" * 20
+        text = f"NPM={fake_npm} GITLAB={fake_gl}"
+        findings, redacted = scan_text(text, redact=True)
+        self.assertEqual(len(findings), 2)
+        types = [f[0] for f in findings]
+        self.assertIn("NPM Access Token", types)
+        self.assertIn("GitLab Personal Access Token", types)
+
+    def test_scan_text_with_allowlist(self):
+        dummy_token = "ghp_" + "0" * 36
+        text = f"Sample dummy token is {dummy_token}"
+        # Without allowlist
+        findings, _ = scan_text(text, redact=True)
+        self.assertEqual(len(findings), 1)
+
+        # With allowlist
+        findings_allowed, redacted = scan_text(text, redact=True, allowlist={dummy_token})
+        self.assertEqual(len(findings_allowed), 0)
+        self.assertEqual(redacted, text)
+
     def test_scan_text_clean_content(self):
         text = "Hello world! This is safe non-secret markdown documentation."
         findings, redacted = scan_text(text, redact=True)
@@ -43,10 +65,9 @@ class TestClaudeCodeSafeguard(unittest.TestCase):
         self.assertEqual(len(findings), 1)
         self.assertEqual(findings[0]["type"], "GitHub Personal Access Token (Classic)")
 
-        # Verify in-place redaction
         new_content = file_path.read_text(encoding="utf-8")
         self.assertNotIn(fake_gh_pat, new_content)
-        self.assertIn("[REDACTED_GITHUB_PERSONAL_ACCESS_TOKEN_(CLASSIC)]", new_content)
+        self.assertIn("[REDACTED_GITHUB_PERSONAL_ACCESS_TOKEN_CLASSIC]", new_content)
 
     def test_scan_env_file_detected(self):
         env_file = Path(self.test_dir) / ".env"
@@ -61,15 +82,3 @@ class TestClaudeCodeSafeguard(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-
-    def test_directory_scan_includes_env_file(self):
-        env_file = Path(self.test_dir) / ".env"
-        env_file.write_text("OPENAI_KEY=sk-" + "b" * 48, encoding="utf-8")
-
-        # Hidden file that is NOT .env should be skipped
-        dotfile = Path(self.test_dir) / ".custom_hidden"
-        dotfile.write_text("OPENAI_KEY=sk-" + "c" * 48, encoding="utf-8")
-
-        clean, findings = scan_file(str(env_file), redact=False, quiet=True)
-        self.assertFalse(clean)
-        self.assertEqual(len(findings), 1)

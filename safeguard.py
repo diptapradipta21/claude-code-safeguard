@@ -12,12 +12,15 @@ import json
 import re
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 # High-entropy & known API key regex patterns (specific patterns first, generic fallback last)
 SECRET_PATTERNS: List[Tuple[str, str]] = [
     (r"\bghp_[a-zA-Z0-9]{36}\b", "GitHub Personal Access Token (Classic)"),
     (r"\bgithub_pat_[a-zA-Z0-9_]{82}\b", "GitHub Fine-Grained Personal Access Token"),
+    (r"\bglpat-[a-zA-Z0-9_\-]{20,}\b", "GitLab Personal Access Token"),
+    (r"\bnpm_[a-zA-Z0-9]{36}\b", "NPM Access Token"),
+    (r"\b[MN][A-Za-z\d]{23,26}\.[A-Za-z0-9_\-]{6}\.[A-Za-z0-9_\-]{27,38}\b", "Discord Bot Token"),
     (r"\bsk-ant-[a-zA-Z0-9_\-]{80,}\b", "Anthropic API Key"),
     (r"\bsk-ant-admin-[a-zA-Z0-9_\-]{32,}\b", "Anthropic Workspace Key"),
     (r"\bsk-[a-zA-Z0-9]{48}\b", "OpenAI API Key"),
@@ -37,21 +40,36 @@ SECRET_PATTERNS: List[Tuple[str, str]] = [
 ]
 
 
-def scan_text(text: str, redact: bool = True) -> Tuple[List[Tuple[str, str]], str]:
+def scan_text(
+    text: str,
+    redact: bool = True,
+    allowlist: Optional[Set[str]] = None
+) -> Tuple[List[Tuple[str, str]], str]:
     found_secrets: List[Tuple[str, str]] = []
     sanitized_text = text
+    allowed = allowlist or set()
 
     for pattern, name in SECRET_PATTERNS:
         matches = list(re.finditer(pattern, sanitized_text))
         for m in matches:
             secret_val = m.group(0)
+            if secret_val in allowed:
+                continue
             found_secrets.append((name, secret_val))
-            sanitized_text = sanitized_text.replace(secret_val, f"[REDACTED_{name.upper().replace(' ', '_').replace('/', '_')}]")
+            sanitized_text = sanitized_text.replace(
+                secret_val,
+                f"[REDACTED_{name.upper().replace(' ', '_').replace('/', '_').replace('(', '').replace(')', '')}]"
+            )
 
     return found_secrets, sanitized_text if redact else text
 
 
-def scan_file(file_path: str, redact: bool = False, quiet: bool = False) -> Tuple[bool, List[Dict[str, str]]]:
+def scan_file(
+    file_path: str,
+    redact: bool = False,
+    quiet: bool = False,
+    allowlist: Optional[Set[str]] = None
+) -> Tuple[bool, List[Dict[str, str]]]:
     p = Path(file_path)
     if not p.exists():
         if not quiet:
@@ -59,7 +77,7 @@ def scan_file(file_path: str, redact: bool = False, quiet: bool = False) -> Tupl
         return False, []
 
     content = p.read_text(encoding="utf-8", errors="ignore")
-    secrets, sanitized = scan_text(content, redact=redact)
+    secrets, sanitized = scan_text(content, redact=redact, allowlist=allowlist)
 
     findings: List[Dict[str, str]] = []
     for name, val in secrets:
@@ -94,12 +112,15 @@ def main() -> None:
     parser.add_argument("--stdin", action="store_true", help="Read input text directly from standard input (pipe mode)")
     parser.add_argument("--json", action="store_true", help="Output audit report as structured JSON")
     parser.add_argument("--exclude-dir", nargs="*", default=[], help="Directory names to ignore during scanning")
+    parser.add_argument("--allow", "--allowlist", default="", help="Comma-separated tokens/substrings to exempt from detection")
 
     args = parser.parse_args()
 
+    allow_set = set(t.strip() for t in args.allow.split(",") if t.strip())
+
     if args.stdin:
         input_data = sys.stdin.read()
-        secrets, clean = scan_text(input_data, redact=True)
+        secrets, clean = scan_text(input_data, redact=True, allowlist=allow_set)
         if secrets and not args.json:
             print(f"[!] Safeguard intercepted {len(secrets)} credentials.", file=sys.stderr)
         if args.json:
@@ -125,7 +146,7 @@ def main() -> None:
 
     if target_path.is_file():
         scanned_count = 1
-        clean, findings = scan_file(str(target_path), redact=args.redact, quiet=quiet_mode)
+        clean, findings = scan_file(str(target_path), redact=args.redact, quiet=quiet_mode, allowlist=allow_set)
         all_clean = clean
         all_findings.extend(findings)
     else:
@@ -139,7 +160,7 @@ def main() -> None:
             if f.name.startswith(".") and not f.name.startswith(".env"):
                 continue
             scanned_count += 1
-            clean, findings = scan_file(str(f), redact=args.redact, quiet=quiet_mode)
+            clean, findings = scan_file(str(f), redact=args.redact, quiet=quiet_mode, allowlist=allow_set)
             if not clean:
                 all_clean = False
                 all_findings.extend(findings)
