@@ -18,6 +18,9 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 SECRET_PATTERNS: List[Tuple[str, str]] = [
     (r"\bghp_[a-zA-Z0-9]{36}\b", "GitHub Personal Access Token (Classic)"),
     (r"\bgithub_pat_[a-zA-Z0-9_]{82}\b", "GitHub Fine-Grained Personal Access Token"),
+    (r"\bghs_[a-zA-Z0-9]{36}\b", "GitHub App Installation Token"),
+    (r"\bghu_[a-zA-Z0-9]{36}\b", "GitHub User-to-Server Token"),
+    (r"\bghr_[a-zA-Z0-9]{36}\b", "GitHub Refresh Token"),
     (r"\bglpat-[a-zA-Z0-9_\-]{20,}\b", "GitLab Personal Access Token"),
     (r"\bnpm_[a-zA-Z0-9]{36}\b", "NPM Access Token"),
     (r"\b[MN][A-Za-z\d]{23,26}\.[A-Za-z0-9_\-]{6}\.[A-Za-z0-9_\-]{27,38}\b", "Discord Bot Token"),
@@ -33,6 +36,8 @@ SECRET_PATTERNS: List[Tuple[str, str]] = [
     (r"https://hooks\.slack\.com/services/T[a-zA-Z0-9_]+/B[a-zA-Z0-9_]+/[a-zA-Z0-9_]+", "Slack Webhook URL"),
     (r"\beyJ[a-zA-Z0-9_-]{10,}\.eyJ[a-zA-Z0-9_-]{10,}\.[a-zA-Z0-9_-]{10,}\b", "JSON Web Token (JWT)"),
     (r"\bAKIA[0-9A-Z]{16}\b", "AWS Access Key ID"),
+    (r"\bAC[a-f0-9]{32}\b", "Twilio Account SID"),
+    (r"\bkey-[0-9a-zA-Z]{32}\b", "Mailgun API Key"),
     (r"\bAIza[0-9A-Za-z-_]{35}\b", "Google API Key"),
     (r"-----BEGIN (?:RSA |EC )?PRIVATE KEY-----", "Private Cryptographic Key"),
     (r"(?i)Bearer\s+([a-zA-Z0-9_\-\.]{25,})", "Bearer Authentication Token"),

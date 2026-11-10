@@ -80,5 +80,18 @@ class TestClaudeCodeSafeguard(unittest.TestCase):
         self.assertEqual(findings[0]["type"], "AWS Access Key ID")
 
 
+
+    def test_scan_text_detects_github_app_and_twilio(self):
+        fake_ghs = "ghs_" + "x" * 36
+        fake_twilio = "AC" + "1" * 32
+        text = f"INSTALL_TOKEN={fake_ghs} TWILIO_SID={fake_twilio}"
+        findings, redacted = scan_text(text, redact=True)
+        self.assertEqual(len(findings), 2)
+        types = [f[0] for f in findings]
+        self.assertIn("GitHub App Installation Token", types)
+        self.assertIn("Twilio Account SID", types)
+        self.assertNotIn(fake_ghs, redacted)
+        self.assertNotIn(fake_twilio, redacted)
+
 if __name__ == "__main__":
     unittest.main()
