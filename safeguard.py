@@ -21,6 +21,7 @@ SECRET_PATTERNS: List[Tuple[str, str]] = [
     (r"\bghs_[a-zA-Z0-9]{36}\b", "GitHub App Installation Token"),
     (r"\bghu_[a-zA-Z0-9]{36}\b", "GitHub User-to-Server Token"),
     (r"\bghr_[a-zA-Z0-9]{36}\b", "GitHub Refresh Token"),
+    (r"\bgho_[a-zA-Z0-9]{36}\b", "GitHub OAuth Access Token"),
     (r"\bglpat-[a-zA-Z0-9_\-]{20,}\b", "GitLab Personal Access Token"),
     (r"\bnpm_[a-zA-Z0-9]{36}\b", "NPM Access Token"),
     (r"\b[MN][A-Za-z\d]{23,26}\.[A-Za-z0-9_\-]{6}\.[A-Za-z0-9_\-]{27,38}\b", "Discord Bot Token"),
@@ -38,11 +39,28 @@ SECRET_PATTERNS: List[Tuple[str, str]] = [
     (r"\bAKIA[0-9A-Z]{16}\b", "AWS Access Key ID"),
     (r"\bAC[a-f0-9]{32}\b", "Twilio Account SID"),
     (r"\bkey-[0-9a-zA-Z]{32}\b", "Mailgun API Key"),
+    (r"\bpypi-AgEIcHlwaS5vcmcCJ[A-Za-z0-9_\-]{50,}\b", "PyPI Upload Token"),
+    (r"\bPMAK-[a-f0-9]{24}-[a-f0-9]{34}\b", "Postman API Key"),
     (r"\bAIza[0-9A-Za-z-_]{35}\b", "Google API Key"),
     (r"-----BEGIN (?:RSA |EC )?PRIVATE KEY-----", "Private Cryptographic Key"),
     (r"(?i)Bearer\s+([a-zA-Z0-9_\-\.]{25,})", "Bearer Authentication Token"),
     (r"(?i)(api[_-]?key|secret|token|password|passwd|auth)[\s:=]+['\"]?([a-zA-Z0-9_\-\.]{16,})['\"]?", "Generic Secret/API Key"),
 ]
+
+
+def get_staged_files() -> List[str]:
+    """Retrieve list of staged git files using git diff --cached."""
+    import subprocess
+    try:
+        res = subprocess.run(
+            ["git", "diff", "--cached", "--name-only", "--diff-filter=ACMR"],
+            capture_output=True,
+            text=True,
+            check=True
+        )
+        return [f.strip() for f in res.stdout.splitlines() if f.strip()]
+    except Exception:
+        return []
 
 
 def scan_text(
@@ -118,6 +136,7 @@ def main() -> None:
     parser.add_argument("--json", action="store_true", help="Output audit report as structured JSON")
     parser.add_argument("--exclude-dir", nargs="*", default=[], help="Directory names to ignore during scanning")
     parser.add_argument("--allow", "--allowlist", default="", help="Comma-separated tokens/substrings to exempt from detection")
+    parser.add_argument("--staged", action="store_true", help="Audit git staged files before commit (pre-commit guard)")
 
     args = parser.parse_args()
 
@@ -139,6 +158,39 @@ def main() -> None:
         else:
             sys.stdout.write(clean)
         sys.exit(0 if len(secrets) == 0 else 1)
+
+    if args.staged:
+        staged_files = get_staged_files()
+        if not staged_files:
+            if not args.json:
+                print("[*] No staged git files detected to scan.")
+            else:
+                print(json.dumps({"staged": True, "files_scanned": 0, "findings_count": 0, "clean": True, "findings": []}, indent=2))
+            sys.exit(0)
+
+        all_findings: List[Dict[str, str]] = []
+        scanned_count = 0
+        all_clean = True
+        for sf in staged_files:
+            p = Path(sf)
+            if not p.is_file():
+                continue
+            scanned_count += 1
+            clean, findings = scan_file(str(p), redact=args.redact, quiet=args.json, allowlist=allow_set)
+            if not clean:
+                all_clean = False
+                all_findings.extend(findings)
+
+        if args.json:
+            report = {
+                "staged": True,
+                "files_scanned": scanned_count,
+                "findings_count": len(all_findings),
+                "clean": all_clean,
+                "findings": all_findings
+            }
+            print(json.dumps(report, indent=2))
+        sys.exit(0 if all_clean else 1)
 
     target_path = Path(args.target)
     quiet_mode = args.json

@@ -93,5 +93,25 @@ class TestClaudeCodeSafeguard(unittest.TestCase):
         self.assertNotIn(fake_ghs, redacted)
         self.assertNotIn(fake_twilio, redacted)
 
+    def test_scan_text_detects_gho_pypi_postman(self):
+        fake_gho = "gho_" + "y" * 36
+        fake_pypi = "pypi-AgEIcHlwaS5vcmcCJ" + "z" * 50
+        fake_pmak = "PMAK-" + "a" * 24 + "-" + "b" * 34
+        text = f"GHO={fake_gho} PYPI={fake_pypi} POSTMAN={fake_pmak}"
+        findings, redacted = scan_text(text, redact=True)
+        self.assertEqual(len(findings), 3)
+        types = [f[0] for f in findings]
+        self.assertIn("GitHub OAuth Access Token", types)
+        self.assertIn("PyPI Upload Token", types)
+        self.assertIn("Postman API Key", types)
+        self.assertNotIn(fake_gho, redacted)
+        self.assertNotIn(fake_pypi, redacted)
+        self.assertNotIn(fake_pmak, redacted)
+
+    def test_get_staged_files_callable(self):
+        from safeguard import get_staged_files
+        res = get_staged_files()
+        self.assertIsInstance(res, list)
+
 if __name__ == "__main__":
     unittest.main()
